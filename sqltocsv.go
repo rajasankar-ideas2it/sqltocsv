@@ -17,7 +17,7 @@ import (
 // WriteFile will write a CSV file to the file name specified (with headers)
 // based on whatever is in the sql.Rows you pass in. It calls WriteCsvToWriter under
 // the hood.
-func WriteFile(csvFileName string, rows *sql.Rows) error {
+func WriteFile(csvFileName string, rows *sql.Rows) (bool, error) {
 	return New(rows).WriteFile(csvFileName)
 }
 
@@ -29,7 +29,7 @@ func WriteString(rows *sql.Rows) (string, error) {
 
 // Write will write a CSV file to the writer passed in (with headers)
 // based on whatever is in the sql.Rows you pass in.
-func Write(writer io.Writer, rows *sql.Rows) error {
+func Write(writer io.Writer, rows *sql.Rows) (bool, error) {
 	return New(rows).Write(writer)
 }
 
@@ -70,34 +70,36 @@ func (c Converter) String() string {
 // WriteString returns the CSV as a string and an error if something goes wrong
 func (c Converter) WriteString() (string, error) {
 	buffer := bytes.Buffer{}
-	err := c.Write(&buffer)
+	_, err := c.Write(&buffer)
 	return buffer.String(), err
 }
 
 // WriteFile writes the CSV to the filename specified, return an error if problem
-func (c Converter) WriteFile(csvFileName string) error {
+func (c Converter) WriteFile(csvFileName string) (bool, error) {
 	f, err := os.Create(csvFileName)
+	hasMoreRows := false
 	if err != nil {
-		return err
+		return hasMoreRows, err
 	}
 
-	err = c.Write(f)
+	hasMoreRows, err = c.Write(f)
 	if err != nil {
 		f.Close() // close, but only return/handle the write error
-		return err
+		return hasMoreRows, err
 	}
 
-	return f.Close()
+	return hasMoreRows, f.Close()
 }
 
 // Write writes the CSV to the Writer provided
-func (c Converter) Write(writer io.Writer) error {
+func (c Converter) Write(writer io.Writer) (bool, error) {
 	rows := c.rows
+	hasMoreRows := false
 	csvWriter := csv.NewWriter(writer)
 
 	columnNames, err := rows.Columns()
 	if err != nil {
-		return err
+		return hasMoreRows, err
 	}
 
 	if c.WriteHeaders {
@@ -112,7 +114,7 @@ func (c Converter) Write(writer io.Writer) error {
 		err = csvWriter.Write(headers)
 		if err != nil {
 			// TODO wrap err to say it was an issue with headers?
-			return err
+			return hasMoreRows, err
 		}
 	}
 
@@ -121,6 +123,7 @@ func (c Converter) Write(writer io.Writer) error {
 	valuePtrs := make([]interface{}, count)
 
 	for rows.Next() {
+		hasMoreRows = true
 		row := make([]string, count)
 
 		for i, _ := range columnNames {
@@ -128,7 +131,7 @@ func (c Converter) Write(writer io.Writer) error {
 		}
 
 		if err = rows.Scan(valuePtrs...); err != nil {
-			return err
+			return hasMoreRows, err
 		}
 
 		for i, _ := range columnNames {
@@ -162,7 +165,7 @@ func (c Converter) Write(writer io.Writer) error {
 			err = csvWriter.Write(row)
 			if err != nil {
 				// TODO wrap this err to give context as to why it failed?
-				return err
+				return hasMoreRows, err
 			}
 		}
 	}
@@ -170,7 +173,7 @@ func (c Converter) Write(writer io.Writer) error {
 
 	csvWriter.Flush()
 
-	return err
+	return hasMoreRows, err
 }
 
 // New will return a Converter which will write your CSV however you like

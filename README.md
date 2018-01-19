@@ -10,7 +10,7 @@ Importing the package
 import (
     "database/sql"
     _ "github.com/go-sql-driver/mysql" // or the driver of your choice
-    "github.com/joho/sqltocsv"
+    "github.com/rajasankar-ideas2it/sqltocsv"
 )
 ```
 
